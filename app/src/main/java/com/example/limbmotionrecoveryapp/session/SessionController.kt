@@ -483,6 +483,14 @@ class SessionController private constructor(context: Context) {
             snapshot
         }
 
+        // ===== 排查：打印即将发送的 JSON =====
+        for (data in batch) {
+            val payload = formatDataToPayload(data)
+            val jsonDebug = org.json.JSONObject(payload).toString()
+            Log.d(TAG, "Upload payload: $jsonDebug")
+        }
+        // ======================================
+
         try {
             // TODO: Replace with v2Api.uploadMeasurementsBatch() when available.
             // Current fallback: sequential single-item upload inside an async block.
@@ -644,7 +652,7 @@ class SessionController private constructor(context: Context) {
         val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneOffset.UTC)
         return mapOf(
             "sessionId" to currentSessionId,
-            "targetAngles" to data.targetAngles.map {
+            "jointAngles" to data.targetAngles.map {
                 mapOf(
                     "timestamp" to formatter.format(Instant.ofEpochMilli(it.timestamp)),
                     "angleID" to it.angleID,

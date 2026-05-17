@@ -8,7 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 
 class V2ApiClient(
-    private val baseUrl: String = "http://113.44.220.94:3000"
+    private val baseUrl: String = "https://dsd2026-teamv2-production.up.railway.app"
 ) {
     private val client = OkHttpClient()
     private val gson = Gson()
@@ -81,7 +81,7 @@ class V2ApiClient(
     }
 
     fun uploadMeasurement(payload: Map<String, Any>, token: String): Map<String, Any?> {
-        val req = Request.Builder().url(url("/measurements/raw"))
+        val req = Request.Builder().url(url("/measurements"))
             .header("Authorization", "Bearer $token")
             .post(gson.toJson(payload).toRequestBody(JSON_MEDIA))
             .build()

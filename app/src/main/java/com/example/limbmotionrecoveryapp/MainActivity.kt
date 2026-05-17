@@ -23,7 +23,7 @@ class MainActivity : AppCompatActivity() {
 
 
         //test-code-Yiding Wang
-        //startActivity(Intent(this, com.example.limbmotionrecoveryapp.test.TestS2Activity::class.java))
+        startActivity(Intent(this, com.example.limbmotionrecoveryapp.test.TestS2Activity::class.java))
         //test-code-end
 
         setContentView(R.layout.activity_main)
