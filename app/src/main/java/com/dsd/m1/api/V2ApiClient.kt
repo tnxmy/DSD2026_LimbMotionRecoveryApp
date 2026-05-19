@@ -88,6 +88,18 @@ class V2ApiClient(
         return parseResponse(client.newCall(req).execute())
     }
 
+    fun uploadMeasurementsBatch(sessionId: Int, measurements: List<Map<String, Any>>, token: String): Map<String, Any?> {
+        val body = mapOf(
+            "sessionId" to sessionId,
+            "measurements" to measurements
+        )
+        val req = Request.Builder().url(url("/measurements/batch"))
+            .header("Authorization", "Bearer $token")
+            .post(gson.toJson(body).toRequestBody(JSON_MEDIA))
+            .build()
+        return parseResponse(client.newCall(req).execute())
+    }
+
     fun getMeasurements(sessionId: Int, token: String): List<Map<String, Any?>> {
         val req = Request.Builder().url(url("/measurements/$sessionId"))
             .header("Authorization", "Bearer $token").get().build()

@@ -188,7 +188,6 @@ class TestS2Activity : AppCompatActivity() {
         sb.appendLine("[STATE] ${controller.getState()}")
         sb.appendLine("[SESSION] ${controller.getCurrentSessionId()}")
         sb.appendLine("[EXERCISE] ${controller.getCurrentExerciseType()}")
-        sb.appendLine("[PLAN_ID] ${controller.getCurrentPlanId()}")
         sb.appendLine("------------------------------")
 
         // --- Latest Instantaneous Data ---

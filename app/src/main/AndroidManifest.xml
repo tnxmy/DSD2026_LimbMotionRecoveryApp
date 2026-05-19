@@ -55,9 +55,15 @@
             android:name=".sensor.SensorActivity"
             android:exported="false" />
 
-        <!-- ===== test Activity ===== -->
+        <!-- ===== test Activity Yiding Wang ===== -->
         <activity
             android:name=".test.TestS2Activity"
+            android:exported="false" />
+        <activity
+            android:name=".test.LegViewTestActivity"
+            android:exported="false" />
+        <activity
+            android:name=".test.ExerciseActivity"
             android:exported="false" />
         <!-- ============================= -->
 

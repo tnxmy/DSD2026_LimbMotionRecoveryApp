@@ -1,3 +1,6 @@
+//app/src/main/java/com/example/limbmotionrecoveryapp/session/SessionController.kt
+
+
 package com.example.limbmotionrecoveryapp.session
 
 import android.content.Context
@@ -126,7 +129,9 @@ class SessionController private constructor(context: Context) {
     private var currentUserId: Int = -1
     private var currentToken: String = ""
     private var currentSessionId: Int = -1
+    /* [已移除] 不再关联服务器 plan
     private var currentPlanId: Int = -1
+    */
     private var currentExerciseType: String = DEFAULT_EXERCISE_TYPE
     private var sensorJointMapping: Map<String, String> = emptyMap()
 
@@ -191,6 +196,14 @@ class SessionController private constructor(context: Context) {
         buildS2(useReal)
     }
 
+    fun setExerciseType(type: String) {
+        check(currentState == State.IDLE) {
+            "Can only set exercise type in IDLE state, current=${currentState::class.simpleName}"
+        }
+        currentExerciseType = type
+        Log.i(TAG, "Exercise type manually set to: $currentExerciseType")
+    }
+
     // -------------------------------------------------------------------------
     // 2. Start session
     // -------------------------------------------------------------------------
@@ -212,10 +225,7 @@ class SessionController private constructor(context: Context) {
             currentUserId = prefs.getInt("userId", 0)
             check(currentToken.isNotBlank() && currentUserId != 0) { "User not logged in" }
 
-            val plan = fetchCurrentPlan()
-            currentPlanId = plan?.first ?: -1
-            currentExerciseType = plan?.second ?: DEFAULT_EXERCISE_TYPE
-            Log.i(TAG, "Exercise type: $currentExerciseType, planId=$currentPlanId")
+            Log.i(TAG, "Exercise type: $currentExerciseType, planId=N/A")
 
             val sessionResp = v2Api.createSession(currentUserId, currentToken)
             currentSessionId = parseId(sessionResp["id"])
@@ -315,7 +325,6 @@ class SessionController private constructor(context: Context) {
             Log.i(TAG, "S2 stopped: samples=${s2Summary.sampleCount}")
 
             v2Api.endSession(currentSessionId, currentToken)
-            markPlanCompletedIfNeeded()
 
             // Final fetch of recommendations at session end
             fetchRecommendations()
@@ -326,8 +335,7 @@ class SessionController private constructor(context: Context) {
                 errorCount = s2Summary.errorCount,
                 startTime = s2Summary.startTime,
                 endTime = s2Summary.endTime,
-                exerciseType = currentExerciseType,
-                planId = currentPlanId
+                exerciseType = currentExerciseType
             )
             sessionSummary = summary
 
@@ -353,7 +361,6 @@ class SessionController private constructor(context: Context) {
             transition(State.ENDED, State.IDLE)
 
             currentSessionId = -1
-            currentPlanId = -1
             currentExerciseType = DEFAULT_EXERCISE_TYPE
             sensorJointMapping = emptyMap()
             latestDataRef.set(null)
@@ -372,11 +379,9 @@ class SessionController private constructor(context: Context) {
             Result.failure(e)
         }
     }
-
     // -------------------------------------------------------------------------
     // 7. Three 10 Hz loops (read / upload / download)
     // -------------------------------------------------------------------------
-
     private fun startAllLoops() {
         stopAllLoops()
         controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -432,7 +437,6 @@ class SessionController private constructor(context: Context) {
             }
         }
     }
-
     /** 10 Hz V2 download loop: skips if previous download still in flight. */
     private fun startDownloadLoop() {
         downloadJob = controllerScope?.launch {
@@ -442,9 +446,10 @@ class SessionController private constructor(context: Context) {
                     launch {
                         try {
                             val recs = v2Api.getSessionRecommendations(currentSessionId, currentToken)
+                            Log.d(TAG, "AI recs count=${recs.size}, raw=$recs")
                             latestLiveRecommendations = recs
                         } catch (e: Exception) {
-                            Log.w(TAG, "Download loop error: ${e.message}")
+                            Log.e(TAG, "AI fetch failed: ${e.message}", e)
                         } finally {
                             isDownloading = false
                         }
@@ -475,6 +480,10 @@ class SessionController private constructor(context: Context) {
      * Drains the upload queue and sends to V2.
      * If any upload fails, the entire batch is re-queued at the head for the next cycle.
      */
+    /**
+     * Drains the upload queue and sends to V2.
+     * If any upload fails, the entire batch is re-queued at the head for the next cycle.
+     */
     private suspend fun flushUploadQueue() {
         val batch = synchronized(uploadQueue) {
             if (uploadQueue.isEmpty()) return
@@ -482,29 +491,17 @@ class SessionController private constructor(context: Context) {
             uploadQueue.clear()
             snapshot
         }
-
-        // ===== 排查：打印即将发送的 JSON =====
-        for (data in batch) {
-            val payload = formatDataToPayload(data)
-            val jsonDebug = org.json.JSONObject(payload).toString()
-            Log.d(TAG, "Upload payload: $jsonDebug")
-        }
-        // ======================================
-
         try {
-            // TODO: Replace with v2Api.uploadMeasurementsBatch() when available.
-            // Current fallback: sequential single-item upload inside an async block.
-            for (data in batch) {
-                val payload = formatDataToPayload(data)
-                v2Api.uploadMeasurement(payload, currentToken)
-            }
-            Log.i(TAG, "Uploaded ${batch.size} items")
+            val measurements = batch.map { formatDataToPayload(it).minus("sessionId") }
+            val resp = v2Api.uploadMeasurementsBatch(currentSessionId, measurements, currentToken)
+            val inserted = resp["inserted"] as? Number ?: batch.size
+            Log.i(TAG, "Batch uploaded $inserted/${batch.size} items")
         } catch (e: Exception) {
             // Re-queue at head so next flush retries in order
             synchronized(uploadQueue) {
                 uploadQueue.addAll(0, batch)
             }
-            Log.w(TAG, "Upload failed, re-queued ${batch.size} items", e)
+            Log.w(TAG, "Batch upload failed, re-queued ${batch.size} items", e)
         }
     }
 
@@ -579,9 +576,6 @@ class SessionController private constructor(context: Context) {
     /** Returns the current exercise type identifier. */
     fun getCurrentExerciseType(): String = currentExerciseType
 
-    /** Returns the current plan ID from V2, or -1 if none. */
-    fun getCurrentPlanId(): Int = currentPlanId
-
     /** Returns true if a session is currently active (RUNNING or PAUSED). */
     fun hasActiveSession(): Boolean = currentState == State.RUNNING || currentState == State.PAUSED
 
@@ -590,53 +584,6 @@ class SessionController private constructor(context: Context) {
 
     /** Returns the number of FormatData chunks currently waiting in the upload queue. */
     fun getUploadQueueSize(): Int = synchronized(uploadQueue) { uploadQueue.size }
-
-    // -------------------------------------------------------------------------
-    // Internal helpers
-    // -------------------------------------------------------------------------
-
-    private suspend fun fetchCurrentPlan(): Pair<Int, String>? {
-        return try {
-            val now = java.time.LocalDate.now().toString()
-            val schedules = v2Api.getSchedule(currentUserId, currentToken)
-            val pending = schedules
-                .filter {
-                    val status = it["status"] as? String
-                    val date = it["date"] as? String ?: ""
-                    status != "completed" && date >= now
-                }
-                .sortedBy { it["date"] as? String ?: "" }
-            val plan = pending.firstOrNull() ?: return null
-            val id = parseId(plan["id"])
-            val exercise = plan["exercise"] as? String ?: DEFAULT_EXERCISE_TYPE
-            Pair(id, exercise)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch plan, using default", e)
-            null
-        }
-    }
-
-    private suspend fun markPlanCompletedIfNeeded() {
-        try {
-            val now = java.time.LocalDate.now().toString()
-            val schedules = v2Api.getSchedule(currentUserId, currentToken)
-            val target = schedules
-                .filter {
-                    val status = it["status"] as? String
-                    val date = it["date"] as? String ?: ""
-                    status != "completed" && date >= now
-                }
-                .minByOrNull { it["date"] as? String ?: "" } ?: return
-            val id = parseId(target["id"])
-            val exercise = target["exercise"] as? String
-            if (id != -1 && exercise == currentExerciseType) {
-                v2Api.updateSchedule(id, "completed", currentToken)
-                Log.i(TAG, "Plan $id marked completed")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to mark plan completed", e)
-        }
-    }
 
     private suspend fun fetchRecommendations() {
         try {
@@ -705,6 +652,5 @@ data class M1SessionSummary(
     val errorCount: Int,
     val startTime: String,
     val endTime: String,
-    val exerciseType: String,
-    val planId: Int
+    val exerciseType: String
 )
