@@ -12,7 +12,6 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.View
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.LinearInterpolator
 
 class LegView @JvmOverloads constructor(
@@ -32,7 +31,7 @@ class LegView @JvmOverloads constructor(
     // Currently rendered angle during animation interpolation
     private var renderedAngle: Float = 90f
 
-    private var angleMode: AngleMode = AngleMode.DEGREES
+    private var angleMode: AngleMode = AngleMode.RADIANS
 
     // Pending angle queue for adaptive animation
     private val pendingAngles = ArrayDeque<Float>()
@@ -140,7 +139,7 @@ class LegView @JvmOverloads constructor(
         if (pendingAngles.isEmpty()) return
 
         // Backlog protection: if queue grows too large, drop intermediate frames
-        if (pendingAngles.size >= 5) {
+        if (pendingAngles.size >= 10) {
             val latest = pendingAngles.removeLast()
             pendingAngles.clear()
             pendingAngles.addLast(latest)
@@ -150,10 +149,10 @@ class LegView @JvmOverloads constructor(
         val backlog = pendingAngles.size
 
         // Dynamic duration: base 110ms, minus 10ms per queued item, floor at 60ms
-        val durationMs = (110L - backlog * 10L).coerceAtLeast(60L)
+        val durationMs = (120L - backlog * 10L).coerceAtLeast(20L)
 
         // Interpolator: smooth when catching up, linear when under pressure
-        val interpolator = if (backlog >= 3) LinearInterpolator() else AccelerateDecelerateInterpolator()
+        val interpolator = LinearInterpolator()
 
         currentAnimator?.cancel()
         currentAnimator = ValueAnimator.ofFloat(renderedAngle, target).apply {
