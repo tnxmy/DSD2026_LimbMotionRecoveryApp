@@ -26,7 +26,6 @@ class MainActivity : AppCompatActivity() {
         //startActivity(Intent(this, com.example.limbmotionrecoveryapp.test.TestS2Activity::class.java))
         //startActivity(Intent(this, com.example.limbmotionrecoveryapp.test.LegViewTestActivity::class.java))
         startActivity(Intent(this, com.example.limbmotionrecoveryapp.test.ExerciseActivity::class.java))
-
         //test-code-end
 
         setContentView(R.layout.activity_main)
