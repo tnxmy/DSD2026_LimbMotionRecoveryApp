@@ -2,11 +2,9 @@ package com.example.limbmotionrecoveryapp.sensor
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.os.ParcelUuid
 import androidx.lifecycle.MutableLiveData
 import com.dsd.s1.ble.SensorService
 import com.dsd.s1.model.SensorConfig
@@ -22,10 +20,18 @@ import kotlinx.coroutines.withContext
 
 object SensorRepository {
 
-    private const val NOTIFY_CHAR_UUID = "0000ffe4-0000-1000-8000-00805f9b34fb"
-    private const val WITMOTION_SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb"
+    private const val NOTIFY_CHAR_UUID = "0000ffe4-0000-1000-8000-00805f9a34fb"
     private const val SCAN_TIMEOUT_MS = 10_000L
     private const val CONNECT_TIMEOUT_MS = 12_000L
+
+    private val MAC_WHITELIST = setOf(
+        "D5:17:71:B2:B2:67",
+        "C1:18:C7:C3:AA:49",
+        "E1:B8:34:05:DE:E9",
+        "D9:BC:B5:1E:39:35",
+        "D7:27:2D:8F:6A:4C",
+        "D2:26:08:77:94:1B"
+    )
 
     enum class State { IDLE, SCANNING, FOUND, CONNECTING, CONNECTED, ERROR }
 
@@ -66,21 +72,17 @@ object SensorRepository {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        val filters = listOf(
-            ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid.fromString(WITMOTION_SERVICE_UUID))
-                .build()
-        )
-
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 if (state.value != State.SCANNING) return
                 val device = result.device
+                val address = device.address?.uppercase()
+                if (address == null || address !in MAC_WHITELIST) return
                 val name = try { device.name } catch (_: SecurityException) { null }
                     ?: "WitMotion Sensor"
                 val found = FoundDevice(
                     name = name,
-                    address = device.address,
+                    address = address,
                     rssi = result.rssi
                 )
                 stopScan()
@@ -97,7 +99,7 @@ object SensorRepository {
         activeScanCallback = cb
 
         try {
-            bleScanner?.startScan(filters, settings, cb)
+            bleScanner?.startScan(null, settings, cb)
         } catch (e: SecurityException) {
             state.postValue(State.ERROR)
             errorMessage.postValue("Bluetooth permission denied.")
